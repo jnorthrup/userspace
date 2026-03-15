@@ -53,7 +53,9 @@ where
             return;
         }
         
-        block().await
+    block().await;
+    // Mark job completed so joiners are notified
+    job_clone.complete().await;
     };
     
     dispatcher.dispatch_boxed(Box::pin(future));

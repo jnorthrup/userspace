@@ -1,5 +1,8 @@
 use super::{DispatcherEnum, Job, CancellationException};
 use std::sync::Arc;
+use std::any::Any;
+use std::collections::HashMap;
+use std::sync::RwLock as StdRwLock;
 
 /// Defines a scope for new coroutines
 /// Equivalent to Kotlin's CoroutineScope
@@ -13,11 +16,18 @@ pub trait CoroutineScope: Send + Sync {
 pub struct CoroutineContext {
     pub job: Arc<dyn Job>,
     pub dispatcher: DispatcherEnum,
+    // Optional extensible key/value elements attached to the context.
+    // Keys are &'static str for simplicity; values are stored as Arc<dyn Any + Send + Sync>.
+    pub elements: Arc<StdRwLock<HashMap<std::any::TypeId, Arc<dyn Any + Send + Sync>>>>,
 }
 
 impl CoroutineContext {
     pub fn new(job: Arc<dyn Job>, dispatcher: DispatcherEnum) -> Self {
-        Self { job, dispatcher }
+        Self {
+            job,
+            dispatcher,
+            elements: Arc::new(StdRwLock::new(HashMap::new())),
+        }
     }
     
     /// Cancel all coroutines in this context
@@ -28,6 +38,19 @@ impl CoroutineContext {
     /// Check if this context is cancelled
     pub fn is_cancelled(&self) -> bool {
         self.job.is_cancelled()
+    }
+
+    /// Insert or replace a context element keyed by its concrete type.
+    pub fn set_typed<T: Any + Send + Sync + 'static>(&self, value: T) {
+        let mut guard = self.elements.write().unwrap();
+        guard.insert(std::any::TypeId::of::<T>(), Arc::new(value));
+    }
+
+    /// Retrieve an element by concrete type. Returns an Arc<dyn Any> which the caller
+    /// can downcast (e.g. `(&*arc).downcast_ref::<T>()`).
+    pub fn get_typed<T: Any + Send + Sync + 'static>(&self) -> Option<Arc<dyn Any + Send + Sync>> {
+        let guard = self.elements.read().unwrap();
+        guard.get(&std::any::TypeId::of::<T>()).cloned()
     }
 }
 
@@ -64,18 +87,31 @@ struct GlobalScopeImpl;
 
 impl CoroutineScope for GlobalScopeImpl {
     fn get_coroutine_context(&self) -> &CoroutineContext {
-        use std::sync::Once;
-        static ONCE: Once = Once::new();
-        static mut CONTEXT: Option<CoroutineContext> = None;
-        
-        unsafe {
-            ONCE.call_once(|| {
-                let job = Arc::new(super::job::SupervisorJobImpl::new());
-                let dispatcher = super::dispatcher::Dispatchers::default();
-                CONTEXT = Some(CoroutineContext::new(job, dispatcher));
-            });
-            CONTEXT.as_ref().unwrap()
-        }
+        use std::sync::OnceLock;
+
+        static CONTEXT: OnceLock<CoroutineContext> = OnceLock::new();
+
+        CONTEXT.get_or_init(|| {
+            let job = Arc::new(super::job::SupervisorJobImpl::new());
+            let dispatcher = super::dispatcher::Dispatchers::default();
+            CoroutineContext::new(job, dispatcher)
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn global_scope_context_is_static() {
+        // Two calls should return the same reference (same address)
+        let a = GlobalScope::instance().get_coroutine_context() as *const _;
+        let b = GlobalScope::instance().get_coroutine_context() as *const _;
+        assert_eq!(a, b);
+
+        // The supervisor job used by the global context should not be cancelled by default
+        assert!(!GlobalScope::instance().get_coroutine_context().is_cancelled());
     }
 }
 

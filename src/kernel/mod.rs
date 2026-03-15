@@ -1,14 +1,27 @@
-//! Kernel emulation modules for userspace implementations of kernel features
-//! 
-//! This module provides userspace implementations of kernel-level features like
-//! io_uring, NIO, and eBPF JIT compilation without requiring kernel dependencies.
+//! Unified Kernel Abstractions
+//!
+//! Provides high-performance, zero-overhead interfaces to:
+//! - io_uring for kernel I/O
+//! - eBPF JIT compilation
+//! - Memory-mapped I/O
+//! - Kernel bypass techniques
+//!
+//! Features are conditionally compiled and require explicit opt-in.
 
+// Kernel feature detection and capabilities
+pub mod kernel_capabilities;
+
+// Core kernel interface modules
 #[cfg(all(feature = "kernel", target_os = "linux"))]
 pub mod io_uring;
 
 #[cfg(feature = "kernel")]
 pub mod nio;
 
+#[cfg(feature = "syscall-net")]
+pub mod syscall_net;
+
+// Performance and optimization modules
 #[cfg(feature = "kernel-ebpf")]
 pub mod ebpf;
 
@@ -18,9 +31,21 @@ pub mod ebpf_mmap;
 #[cfg(feature = "kernel")]
 pub mod densified_ops;
 
-// Export io_uring types when kernel feature is enabled
-// Note: The current io_uring module exports KernelUring, not UserIoUring
-// We'll need to fix the exports or create aliases
+#[cfg(feature = "kernel")]
+pub mod endgame_bypass;
+
+#[cfg(feature = "simd")]
+pub mod simd_ops;
+
+// Unified type exports
+#[cfg(feature = "kernel")]
+pub use {
+    kernel_capabilities::SystemCapabilities,
+    nio::{NioChannel, SimpleReactor},
+};
+
+#[cfg(feature = "syscall-net")]
+pub use syscall_net::{SocketOps, NetworkInterface};
 
 #[cfg(feature = "kernel")]
-pub use nio::{NioChannel, SimpleReactor};
+pub use endgame_bypass::{DensifiedKernel, IoUringParams};

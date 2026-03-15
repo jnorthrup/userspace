@@ -23,6 +23,9 @@ pub mod network;
 #[cfg(feature = "tensor")]
 pub mod tensor;
 
+#[cfg(feature = "database")]
+pub mod database;
+
 // Re-export commonly used types from concurrency
 pub use concurrency::{
     CoroutineResult, CancellationException, Suspendable,
@@ -44,34 +47,43 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::time::Duration;
+    use tokio::time::timeout;
     
     #[tokio::test]
     async fn test_basic_launch() {
-        let job = Arc::new(JobImpl::new());
-        let dispatcher = Dispatchers::default();
-        let context = CoroutineContext::new(job, dispatcher);
-        let scope = StandardCoroutineScope::new(context);
-        
-        let launched_job = launch(&scope, || async {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        });
-        
-        launched_job.join().await;
-        assert!(launched_job.is_completed());
+        timeout(Duration::from_secs(2), async {
+            let job = Arc::new(JobImpl::new());
+            let dispatcher = Dispatchers::default();
+            let context = CoroutineContext::new(job, dispatcher);
+            let scope = StandardCoroutineScope::new(context);
+            
+            let launched_job = launch(&scope, || async {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            });
+            
+            launched_job.join().await;
+            assert!(launched_job.is_completed());
+        })
+        .await
+        .expect("test_basic_launch timed out");
     }
     
     #[tokio::test]
     async fn test_async_coroutine() {
-        let job = Arc::new(JobImpl::new());
-        let dispatcher = Dispatchers::default();
-        let context = CoroutineContext::new(job, dispatcher);
-        let scope = StandardCoroutineScope::new(context);
-        
-        let deferred = async_coroutine(&scope, || async {
-            42
-        });
-        
-        let result = deferred.await_result().await.unwrap();
-        assert_eq!(result, 42);
+        timeout(Duration::from_secs(2), async {
+            let job = Arc::new(JobImpl::new());
+            let dispatcher = Dispatchers::default();
+            let context = CoroutineContext::new(job, dispatcher);
+            let scope = StandardCoroutineScope::new(context);
+            
+            let deferred = async_coroutine(&scope, || async {
+                42
+            });
+            
+            let result = deferred.await_result().await.unwrap();
+            assert_eq!(result, 42);
+        })
+        .await
+        .expect("test_async_coroutine timed out");
     }
 }

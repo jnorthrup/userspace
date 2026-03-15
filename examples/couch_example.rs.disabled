@@ -1,0 +1,80 @@
+#![cfg(feature = "database")]
+
+use anyhow::Result;
+use serde_json::json;
+use userspace::database::couch::{CouchDatabase, Document, ViewProcessor};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let db_path = PathBuf::from("/tmp/userspace_couch_example");
+    let database = CouchDatabase::new(db_path).await?;
+
+    let doc = Document {
+        id: "user_1".to_string(),
+        rev: "1-abc123".to_string(),
+        content: json!({
+            "name": "John Doe",
+            "email": "john@example.com",
+            "age": 30
+        }),
+    };
+
+    database.put(doc.clone()).await?;
+    let retrieved_doc = database.get("user_1").await?;
+    println!("Retrieved document: {:?}", retrieved_doc);
+
+    let mut view_processor = ViewProcessor::new();
+    let map_reduce_code = r#"
+    function map(doc) {
+        if (doc.age > 25) {
+            emit(doc.id, doc.name);
+        }
+    }
+    "#;
+
+    let view_results = view_processor.process_view(map_reduce_code)?;
+    println!("View results: {:?}", view_results);
+
+    Ok(())
+}
+#![cfg(feature = "database")]
+
+use anyhow::Result;
+use serde_json::json;
+use userspace::database::couch::{CouchDatabase, Document, ViewProcessor};
+use std::path::PathBuf;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let db_path = PathBuf::from("/tmp/userspace_couch_example");
+    let database = CouchDatabase::new(db_path).await?;
+
+    let doc = Document {
+        id: "user_1".to_string(),
+        rev: "1-abc123".to_string(),
+        content: json!({
+            "name": "John Doe",
+            "email": "john@example.com",
+            "age": 30
+        }),
+    };
+
+    database.put(doc.clone()).await?;
+    let retrieved_doc = database.get("user_1").await?;
+    println!("Retrieved document: {:?}", retrieved_doc);
+
+    let mut view_processor = ViewProcessor::new();
+    let map_reduce_code = r#"
+    function map(doc) {
+        if (doc.age > 25) {
+            emit(doc.id, doc.name);
+        }
+    }
+    "#;
+
+    let view_results = view_processor.process_view(map_reduce_code)?;
+    println!("View results: {:?}", view_results);
+
+    Ok(())
+}

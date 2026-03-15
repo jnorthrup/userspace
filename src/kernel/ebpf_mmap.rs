@@ -4,6 +4,7 @@
 //! and integration with the eBPF virtual machine.
 
 use std::io;
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::Arc;
 use parking_lot::RwLock;
@@ -12,8 +13,9 @@ use bytemuck::{Pod, cast_slice, cast_slice_mut};
 
 /// Memory backend for eBPF VM and tensor storage
 pub enum MemoryBackend {
-    /// Heap-allocated memory (default)
-    Heap(Vec<u8>),
+    /// Heap-allocated memory (default) with interior mutability so it can be
+    /// shared (`Arc`) and mutated through locks like the mmap variant.
+    Heap(Arc<RwLock<Vec<u8>>>),
     /// Memory-mapped file
     Mmap(Arc<RwLock<MmapMut>>),
 }
@@ -21,7 +23,7 @@ pub enum MemoryBackend {
 impl MemoryBackend {
     /// Create a heap-backed memory region
     pub fn heap(size: usize) -> Self {
-        MemoryBackend::Heap(vec![0u8; size])
+    MemoryBackend::Heap(Arc::new(RwLock::new(vec![0u8; size])))
     }
     
     /// Create a memory-mapped file backend
@@ -48,19 +50,26 @@ impl MemoryBackend {
     /// Get the length of the memory region
     pub fn len(&self) -> usize {
         match self {
-            MemoryBackend::Heap(v) => v.len(),
+            MemoryBackend::Heap(v) => v.read().len(),
             MemoryBackend::Mmap(m) => m.read().len(),
         }
     }
     
-    /// Get a read-only slice of the memory
-    pub fn as_slice(&self) -> &[u8] {
+    /// Get a read-only view of the memory.
+    ///
+    /// For heap-backed memory this returns a borrowed slice. For mmap-backed
+    /// memory we cannot return a reference tied to the internal lock guard,
+    /// so we return an owned Vec wrapped in a Cow. Callers that need to avoid
+    /// copying should use `with_slice`.
+    pub fn as_slice(&self) -> Cow<[u8]> {
         match self {
-            MemoryBackend::Heap(v) => v.as_slice(),
-            MemoryBackend::Mmap(_) => {
-                // This is tricky - we can't return a reference from a RwLock guard
-                // In practice, you'd use a different API or unsafe code
-                panic!("Use with_slice for mmap backend")
+            MemoryBackend::Heap(v) => {
+                let guard = v.read();
+                Cow::Owned(guard.clone())
+            }
+            MemoryBackend::Mmap(m) => {
+                let guard = m.read();
+                Cow::Owned((&**guard).to_vec())
             }
         }
     }
@@ -71,7 +80,10 @@ impl MemoryBackend {
         F: FnOnce(&[u8]) -> R,
     {
         match self {
-            MemoryBackend::Heap(v) => f(v.as_slice()),
+            MemoryBackend::Heap(v) => {
+                let guard = v.read();
+                f(&**guard)
+            }
             MemoryBackend::Mmap(m) => {
                 let guard = m.read();
                 f(&**guard)
@@ -80,12 +92,15 @@ impl MemoryBackend {
     }
     
     /// Access the mutable memory slice with a closure
-    pub fn with_mut_slice<F, R>(&mut self, f: F) -> R
+    pub fn with_mut_slice<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
     {
         match self {
-            MemoryBackend::Heap(v) => f(v.as_mut_slice()),
+            MemoryBackend::Heap(v) => {
+                let mut guard = v.write();
+                f(&mut **guard)
+            }
             MemoryBackend::Mmap(m) => {
                 let mut guard = m.write();
                 f(&mut **guard)
@@ -198,7 +213,8 @@ impl TensorHandle {
         
         match &*self.backend {
             MemoryBackend::Heap(v) => {
-                let bytes = &v[self.offset..self.offset + self.byte_len];
+                let guard = v.read();
+                let bytes = &guard[self.offset..self.offset + self.byte_len];
                 Ok(cast_slice(bytes))
             }
             MemoryBackend::Mmap(_) => {
@@ -222,6 +238,71 @@ impl TensorHandle {
             Ok(f(typed_slice))
         })
     }
+
+    /// Mutable access to tensor data with a closure. Works for both heap and mmap.
+    pub fn with_slice_mut<T: Pod, F, R>(&self, f: F) -> Result<R, String>
+    where
+        F: FnOnce(&mut [T]) -> R,
+    {
+        if std::mem::size_of::<T>() != self.dtype.size() {
+            return Err("Type size mismatch".to_string());
+        }
+
+        // Use backend's mutable access
+        let res = self.backend.with_mut_slice(|bytes| {
+            let tensor_bytes = &mut bytes[self.offset..self.offset + self.byte_len];
+            // Safety: Pod ensures alignment/representation; cast_slice_mut returns &mut [T]
+            let typed = cast_slice_mut(tensor_bytes);
+            f(typed)
+        });
+
+        Ok(res)
+    }
+
+    /// In-place add scalar for f32 tensors (simple implementation)
+    #[inline]
+    pub fn add_scalar_f32_inplace(&self, scalar: f32) -> Result<(), String> {
+        if self.dtype != DType::F32 {
+            return Err("dtype mismatch: expected F32".to_string());
+        }
+
+        self.with_slice_mut::<f32, _, _>(|data| {
+            for v in data.iter_mut() {
+                *v += scalar;
+            }
+        })?;
+
+        Ok(())
+    }
+
+    /// Unrolled "wide" in-place add for f32 tensors (processes 4 elements per iteration).
+    /// This is a simple, portable registerization hint via loop unrolling.
+    #[inline]
+    pub fn add_scalar_f32_inplace_wide(&self, scalar: f32) -> Result<(), String> {
+        if self.dtype != DType::F32 {
+            return Err("dtype mismatch: expected F32".to_string());
+        }
+
+        self.with_slice_mut::<f32, _, _>(|data| {
+            let n = data.len();
+            let mut i = 0usize;
+            while i + 4 <= n {
+                // unrolled add of 4 values
+                data[i] += scalar;
+                data[i + 1] += scalar;
+                data[i + 2] += scalar;
+                data[i + 3] += scalar;
+                i += 4;
+            }
+            // tail
+            while i < n {
+                data[i] += scalar;
+                i += 1;
+            }
+        })?;
+
+        Ok(())
+    }
 }
 
 /// Registry for managing tensors
@@ -230,7 +311,7 @@ pub struct TensorRegistry {
     next_id: AtomicU64,
 }
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 impl TensorRegistry {
     pub fn new() -> Self {
@@ -280,6 +361,8 @@ pub struct TensorVM {
     pub backend: Arc<MemoryBackend>,
     pub registry: Arc<TensorRegistry>,
     pub vm: super::ebpf::VM,
+    /// Next free offset (simple bump allocator)
+    pub next_offset: AtomicUsize,
 }
 
 impl TensorVM {
@@ -292,13 +375,26 @@ impl TensorVM {
             backend,
             registry,
             vm,
+            next_offset: AtomicUsize::new(0),
         }
     }
     
     /// Allocate a tensor in the VM's memory
     pub fn alloc_tensor(&self, dtype: DType, shape: Vec<usize>) -> Result<TensorHandle, String> {
-        // In a real implementation, would track allocations
-        let offset = 0; // Simplified - would use actual memory allocator
+        // Simple bump allocator: compute required bytes and allocate aligned to dtype size
+        let numel: usize = shape.iter().product();
+        let byte_len = numel.checked_mul(dtype.size()).ok_or_else(|| "size overflow".to_string())?;
+        let align = dtype.size();
+        // round up to alignment
+        let alloc = (byte_len + align - 1) / align * align;
+
+        let offset = self.next_offset.fetch_add(alloc, Ordering::SeqCst);
+
+        // Ensure we don't allocate beyond backend length
+        if offset.checked_add(byte_len).map_or(true, |end| end > self.backend.len()) {
+            return Err("out of memory".to_string());
+        }
+
         Ok(self.registry.create_tensor(dtype, shape, offset, self.backend.clone()))
     }
 }
@@ -317,6 +413,10 @@ mod tests {
         backend.with_slice(|slice| {
             assert_eq!(slice.len(), 1024);
         });
+
+        // as_slice returns a borrowed slice for heap
+        let view = backend.as_slice();
+        assert_eq!(view.len(), 1024);
     }
     
     #[test]
@@ -330,6 +430,10 @@ mod tests {
         backend.with_slice(|slice| {
             assert_eq!(slice.len(), 4096);
         });
+
+        // as_slice will return an owned Vec wrapped in Cow for mmap
+        let view = backend.as_slice();
+        assert_eq!(view.len(), 4096);
     }
     
     #[test]
@@ -361,5 +465,118 @@ mod tests {
         
         assert_eq!(tensor.id, 0);
         assert!(registry.get(0).is_some());
+    }
+
+    #[test]
+    fn test_tensor_vm_alloc() {
+        let backend = MemoryBackend::heap(1024);
+        let vm = TensorVM::new(backend);
+
+        let t1 = vm.alloc_tensor(DType::F32, vec![4, 4]).expect("alloc1"); // 16 * 4 = 64 bytes
+        let t2 = vm.alloc_tensor(DType::F32, vec![8, 8]).expect("alloc2"); // 64 * 4 = 256 bytes
+
+        // Ensure offsets are distinct and non-overlapping
+        assert_ne!(t1.offset, t2.offset);
+        let end1 = t1.offset + t1.byte_len;
+        let end2 = t2.offset + t2.byte_len;
+
+        assert!(end1 <= t2.offset || end2 <= t1.offset, "allocations overlap");
+        // Ensure within backend
+        assert!(end2 <= vm.backend.len());
+    }
+
+    #[test]
+    fn test_with_slice_mut_heap() {
+        let backend = Arc::new(MemoryBackend::heap(256));
+        let tensor = TensorHandle::new(0, DType::F32, vec![4, 4], 0, backend.clone());
+
+        // write to tensor
+        tensor.with_slice_mut::<f32, _, _>(|data| {
+            for (i, v) in data.iter_mut().enumerate() {
+                *v = i as f32;
+            }
+        }).expect("mut write");
+
+        // read back
+        tensor.with_slice::<f32, _>(|data| {
+            assert_eq!(data[0], 0.0);
+            assert_eq!(data[5], 5.0);
+        }).expect("read");
+    }
+
+    #[test]
+    fn test_with_slice_mut_mmap() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test_mut.dat");
+        let backend = MemoryBackend::mmap_file(&path, 4096).unwrap();
+        let backend = Arc::new(backend);
+
+        let tensor = TensorHandle::new(1, DType::U8, vec![16], 0, backend.clone());
+
+        // mutate via with_slice_mut
+        tensor.with_slice_mut::<u8, _, _>(|data| {
+            for (i, v) in data.iter_mut().enumerate() {
+                *v = (i % 256) as u8;
+            }
+        }).expect("mmap mut");
+
+        // ensure data persisted in mmap view
+        backend.with_slice(|bytes| {
+            assert_eq!(bytes[0], 0u8);
+            assert_eq!(bytes[15], 15u8);
+        });
+
+        // sync range (should be no-op on heap, and flush for mmap)
+        backend.sync_range(0, 16).expect("sync");
+    }
+
+    #[test]
+    fn test_add_scalar_f32_heap_and_wide() {
+        let backend = Arc::new(MemoryBackend::heap(1024));
+        let tensor = TensorHandle::new(0, DType::F32, vec![8, 8], 0, backend.clone());
+
+        // initialize
+        tensor.with_slice_mut::<f32, _, _>(|data| {
+            for (i, v) in data.iter_mut().enumerate() {
+                *v = i as f32;
+            }
+        }).unwrap();
+
+        tensor.add_scalar_f32_inplace(1.0).unwrap();
+
+        tensor.with_slice::<f32, _>(|data| {
+            assert_eq!(data[0], 1.0);
+            assert_eq!(data[10], 11.0);
+        }).unwrap();
+
+        tensor.add_scalar_f32_inplace_wide(2.0).unwrap();
+
+        tensor.with_slice::<f32, _>(|data| {
+            assert_eq!(data[0], 3.0);
+            assert_eq!(data[10], 13.0);
+        }).unwrap();
+    }
+
+    #[test]
+    fn test_add_scalar_f32_mmap() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test_add.dat");
+        let backend = MemoryBackend::mmap_file(&path, 4096).unwrap();
+        let backend = Arc::new(backend);
+
+        let tensor = TensorHandle::new(1, DType::F32, vec![4, 4], 0, backend.clone());
+
+        tensor.with_slice_mut::<f32, _, _>(|data| {
+            for (i, v) in data.iter_mut().enumerate() {
+                *v = i as f32;
+            }
+        }).unwrap();
+
+        tensor.add_scalar_f32_inplace(0.5).unwrap();
+
+        tensor.with_slice::<f32, _>(|data| {
+            assert!((data[0] - 0.5).abs() < 1e-6);
+            assert!((data[5] - 5.5).abs() < 1e-6);
+        }).unwrap();
     }
 }

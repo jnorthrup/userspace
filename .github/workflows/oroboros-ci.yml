@@ -1,0 +1,26 @@
+name: oroboros CI
+
+on:
+  push:
+    paths:
+      - 'tools/oroboros/**'
+  pull_request:
+    paths:
+      - 'tools/oroboros/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Build oroboros
+        working-directory: tools/oroboros
+        run: cargo build --verbose
+      - name: Run tests
+        working-directory: tools/oroboros
+        run: cargo test --verbose

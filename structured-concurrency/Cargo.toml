@@ -1,0 +1,56 @@
+[package]
+name = "structured-concurrency"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Rust library providing call-for-call identical abstractions to Kotlin coroutines"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/structured-concurrency"
+keywords = ["coroutines", "async", "concurrency", "kotlin", "structured"]
+categories = ["asynchronous", "concurrency"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+pin-project-lite = "0.2"
+tracing = "0.1"
+libc = "0.2"
+parking_lot = "0.12"
+dashmap = "5.5"
+bytemuck = "1.14"
+xxhash-rust = { version = "0.8", features = ["xxh3", "const_xxh3"] }
+memmap2 = "0.9"
+crossbeam-channel = "0.5"
+atomic = "0.5"
+bitvec = "1.0"
+once_cell = "1.19"
+
+# Optional "bearer" projects that can be enabled when this workspace is checked out
+# alongside sibling projects. These are path dependencies by design so local
+# development across the consolidation can be done with
+#
+#   cargo test --features betanet
+#   cargo test --features literbike
+#
+# If the sibling folders do not exist, these remain optional and won't affect
+# default builds.
+# Prefer using the user's work folders as bearer projects. These paths are
+# absolute so local development can reference the sibling repositories at
+# the provided locations. If you prefer relative paths, change these to
+# `../betanet` and `../literbike` accordingly.
+betanet = { path = "/Users/jim/work/betanet", optional = true }
+literbike = { path = "/Users/jim/work/literbike", optional = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+# Lightweight domain specific embedded-language (DSEL) for convenient, zero-cost
+# scaffolding, taxonomical import aliases and newtypes for introspection/debugging.
+# Disabled by default so there's no runtime overhead unless explicitly enabled.
+dsel = []
+# Enables extra debugging helpers on top of `dsel`.
+dsel-debug = ["dsel"]
+# Optional bearer features that pull in sibling projects when available
+betanet = ["betanet"]
+literbike = ["literbike"]

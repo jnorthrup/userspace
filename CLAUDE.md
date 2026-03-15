@@ -118,3 +118,34 @@ Tests are embedded in each source file using `#[tokio::test]` attributes. The te
 - Cancellation token propagation
 
 All tests use the Tokio async test framework and should be run with `cargo test`.
+
+## Migration TODOs
+
+This project consolidates features from sibling projects (`literbike`, `betanet`) into `userspace`.
+Below are tracked migration and consolidation tasks. Checkboxes reflect outstanding work.
+
+- [ ] Create `src/kernel/ebpf_mmap.rs` — mmap-backed tensor store and integration with `ebpf` VM
+- [ ] Migrate `syscall_net.rs` from `literbike` (~887 lines)
+- [ ] Migrate `posix_sockets.rs` from `literbike` (~130 lines)
+- [ ] Extract `endgame_kernel_bypass.rs` from `betanet`
+- [ ] Consolidate `io_uring` implementations (betanet vs userspace)
+- [ ] Migrate `knox_proxy` and `tethering_bypass` from `literbike`
+- [ ] Create unified kernel syscall interface (single API surface for syscall adapters)
+- [ ] Test consolidated kernel features (integration + unit tests)
+
+Notes:
+
+- Prioritize migrating the `io_uring` implementations and creating a unified syscall interface to simplify downstream integrations.
+- Use feature flags to gate platform-specific implementations during migration (e.g., `kernel`, `kernel-ebpf`, `kernel-tensor`).
+
+### Network & syscall migrations
+
+Track the network and syscall migration tasks pulled from `literbike` and `betanet`:
+
+- [ ] Migrate `syscall_net.rs` from `literbike` (887 lines)
+- [ ] Migrate `posix_sockets.rs` from `literbike` (130 lines)
+- [ ] Extract `endgame_kernel_bypass.rs` from `betanet`
+- [ ] Consolidate `io_uring` implementations (betanet vs userspace)
+- [ ] Migrate `knox_proxy` and `tethering_bypass` from `literbike`
+- [ ] Create unified kernel syscall interface
+- [ ] Test consolidated kernel features

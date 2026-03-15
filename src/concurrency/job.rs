@@ -88,6 +88,11 @@ impl JobImpl {
             _ => {}
         }
     }
+
+    /// Mark this job as completed and notify waiters.
+    pub async fn complete(&self) {
+        self.set_state(JobState::Completed).await;
+    }
 }
 
 impl Job for JobImpl {
@@ -170,8 +175,13 @@ impl Job for JobImpl {
     }
     
     fn attach_child(&self, child: Arc<dyn Job>) {
+        // Make attaching a child synchronous to avoid race conditions where
+        // a parent cancels before the child has been registered.
+        // Note: using a short `block_on` here keeps the public API synchronous
+        // while still using the async RwLock internally. This mirrors other
+        // sync-to-async bridging in this module (e.g. is_active uses block_on).
         let children = self.children.clone();
-        tokio::spawn(async move {
+        futures::executor::block_on(async move {
             let mut children_guard = children.write().await;
             children_guard.push(child);
         });

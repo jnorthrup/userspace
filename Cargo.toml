@@ -24,8 +24,13 @@ crossbeam-channel = "0.5"
 atomic = "0.5"
 bitvec = "1.0"
 once_cell = "1.19"
-
+serde_json = "1.0.143"
+serde = "1.0.219"
+notify = "8.2.0"
+anyhow = "1.0.99"
+serde_derive = "1.0.219"
 # Bearer dependencies removed - code has been consolidated into this project
+duckdb = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -38,10 +43,16 @@ kernel-ebpf = ["kernel"]
 kernel-tensor = ["kernel-ebpf"]
 network = []
 tensor = []
-full = ["concurrency", "kernel", "kernel-tensor", "network", "tensor"]
+full = ["concurrency", "kernel", "kernel-tensor", "network", "tensor", "database"]
 
 # DSEL features
 dsel = []
 dsel-debug = ["dsel"]
+
+# Database feature
+database = []
+
+[features]
+duckdb = ["duckdb"]
 
 # Bearer features removed - code consolidated

@@ -38,13 +38,14 @@ mod unix {
 
         /// Return the raw fd without closing it (consumes the OwnedHandle)
         /// To avoid moving out of a Drop type, duplicate the fd and return the duplicate.
-        pub fn into_raw_fd(self) -> RawFd {
+        pub fn into_raw_fd(self) -> io::Result<RawFd> {
             let fd = self.as_raw_fd();
             let dup = unsafe { libc::dup(fd) };
             if dup < 0 {
-                panic!("failed to dup fd: {}", std::io::Error::last_os_error());
+                Err(io::Error::last_os_error())
+            } else {
+                Ok(dup)
             }
-            dup
         }
 
         /// Borrow the raw fd
@@ -107,34 +108,64 @@ mod unix {
 
     #[cfg(test)]
     mod tests {
-        use super::OwnedHandle;
-        use std::os::unix::net::UnixStream;
-        use std::io::{Read, Write};
+    use super::OwnedHandle;
+    use std::os::unix::net::UnixStream;
+    use std::time::Duration;
+    use std::thread;
+    use std::sync::mpsc;
+    use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+
+    // Run a closure in a thread and fail the test if it doesn't complete within `dur`.
+    fn run_with_timeout<T, F>(dur: Duration, f: F) -> T
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            // Catch panics in the child and send them back to the tester thread.
+            let res = catch_unwind(AssertUnwindSafe(f));
+            let _ = tx.send(res);
+        });
+
+        match rx.recv_timeout(dur) {
+            Ok(Ok(v)) => v,
+            Ok(Err(payload)) => resume_unwind(payload),
+            Err(mpsc::RecvTimeoutError::Timeout) => panic!("test timed out after {:?}", dur),
+            Err(e) => panic!("recv error: {:?}", e),
+        }
+    }
 
         #[test]
         fn smoke_pair_read_write() {
-            let (a, b) = UnixStream::pair().unwrap();
-            let a_handle = OwnedHandle::from(a);
-            let b_handle = OwnedHandle::from(b);
+            run_with_timeout(Duration::from_secs(2), || {
+                let (a, b) = UnixStream::pair().unwrap();
+                let a_handle = OwnedHandle::from(a);
+                let b_handle = OwnedHandle::from(b);
 
-            // write on a -> read on b
-            a_handle.write_all(b"hello").unwrap();
-            let mut buf = Vec::new();
-            // read some bytes (non-blocking behavior varies); try a short wait loop
-            // We'll attempt to read; read_to_end may block until the peer closes, so use a small read via File
-            b_handle.read_to_end(&mut buf).unwrap_or_default();
-            assert!(buf.windows(5).any(|w| w == b"hello"));
+                // write on a -> read on b
+                a_handle.write_all(b"hello").unwrap();
+                // Close the writer so read_to_end on the reader sees EOF and doesn't block
+                drop(a_handle);
+                let mut buf = Vec::new();
+                // read some bytes (non-blocking behavior varies); try a short wait loop
+                // We'll attempt to read; read_to_end may block until the peer closes, so use a small read via File
+                b_handle.read_to_end(&mut buf).unwrap_or_default();
+                assert!(buf.windows(5).any(|w| w == b"hello"));
+            })
         }
 
         #[test]
         fn clone_and_drop() {
-            let (a, _b) = UnixStream::pair().unwrap();
-            let h1 = OwnedHandle::from(a);
-            let h2 = h1.try_clone().unwrap();
-            assert_ne!(h1.as_raw_fd(), h2.as_raw_fd());
-            // dropping both should not panic
-            drop(h1);
-            drop(h2);
+            run_with_timeout(Duration::from_secs(2), || {
+                let (a, _b) = UnixStream::pair().unwrap();
+                let h1 = OwnedHandle::from(a);
+                let h2 = h1.try_clone().unwrap();
+                assert_ne!(h1.as_raw_fd(), h2.as_raw_fd());
+                // dropping both should not panic
+                drop(h1);
+                drop(h2);
+            })
         }
     }
 }
