@@ -1,1 +1,36 @@
-/target
+# Git ignore for userspace
+
+# Rust / Cargo
+target/
+**/target/
+**/target/**
+
+# Cargo lock files
+Cargo.lock
+**/Cargo.lock
+
+# IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Environment / secrets
+.env
+*.env
+
+# Databases
+*.sqlite
+*.db
+
+# Logs
+*.log
+
+# Node
+node_modules/
+
+# Other caches
+.cache/
+.cargo/
+CACHEDIR.TAG

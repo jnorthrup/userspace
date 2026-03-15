@@ -40,6 +40,12 @@ pub struct DeferredImpl<T: Send + Sync + Clone> {
     completion_notify: Arc<Notify>,
 }
 
+impl<T: Send + Sync + Clone + 'static> Default for DeferredImpl<T> where T: Default {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Send + Sync + Clone + 'static> DeferredImpl<T> {
     pub fn new() -> Self {
         Self {

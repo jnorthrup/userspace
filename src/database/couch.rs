@@ -6,7 +6,6 @@ use serde::{Serialize, Deserialize};
 use memmap2::Mmap;
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write, Read};
-use std::sync::Arc;
 
 /// CouchDB-like document representation (stored as JSON blob in data file)
 #[derive(Clone, Debug, Serialize, Deserialize)]

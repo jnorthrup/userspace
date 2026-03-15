@@ -188,6 +188,7 @@ pub struct Dispatchers;
 
 impl Dispatchers {
     /// Default dispatcher for CPU-bound work
+    #[allow(clippy::fn_to_numeric_cast_any)]
     pub fn default() -> DispatcherEnum {
         DispatcherEnum::Default(DefaultDispatcher)
     }

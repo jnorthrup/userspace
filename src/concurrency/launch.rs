@@ -102,7 +102,7 @@ where
 {
     let context = scope.get_coroutine_context();
     let deferred = Arc::new(super::deferred::DeferredImpl::new());
-    let dispatcher = dispatcher.unwrap_or_else(|| context.dispatcher.clone());
+    let _dispatcher = dispatcher.unwrap_or_else(|| context.dispatcher.clone());
     
     // Attach as child to scope's job
     context.job.attach_child(deferred.clone());

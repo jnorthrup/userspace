@@ -124,14 +124,14 @@ All tests use the Tokio async test framework and should be run with `cargo test`
 This project consolidates features from sibling projects (`literbike`, `betanet`) into `userspace`.
 Below are tracked migration and consolidation tasks. Checkboxes reflect outstanding work.
 
-- [ ] Create `src/kernel/ebpf_mmap.rs` — mmap-backed tensor store and integration with `ebpf` VM
-- [ ] Migrate `syscall_net.rs` from `literbike` (~887 lines)
-- [ ] Migrate `posix_sockets.rs` from `literbike` (~130 lines)
-- [ ] Extract `endgame_kernel_bypass.rs` from `betanet`
-- [ ] Consolidate `io_uring` implementations (betanet vs userspace)
-- [ ] Migrate `knox_proxy` and `tethering_bypass` from `literbike`
-- [ ] Create unified kernel syscall interface (single API surface for syscall adapters)
-- [ ] Test consolidated kernel features (integration + unit tests)
+- [x] Create `src/kernel/ebpf_mmap.rs` — mmap-backed tensor store and integration with `ebpf` VM
+- [x] Migrate `syscall_net.rs` from `literbike` (~887 lines)
+- [x] Migrate `posix_sockets.rs` from `literbike` (~130 lines)
+- [x] Extract `endgame_kernel_bypass.rs` from `betanet` (as `endgame_bypass.rs`)
+- [x] Consolidate `io_uring` implementations (betanet vs userspace) — single impl in `io_uring.rs`
+- [x] Migrate `knox_proxy` and `tethering_bypass` from `literbike`
+- [x] Create unified kernel syscall interface (single API surface for syscall adapters)
+- [x] Test consolidated kernel features (integration + unit tests)
 
 Notes:
 
@@ -142,10 +142,11 @@ Notes:
 
 Track the network and syscall migration tasks pulled from `literbike` and `betanet`:
 
-- [ ] Migrate `syscall_net.rs` from `literbike` (887 lines)
-- [ ] Migrate `posix_sockets.rs` from `literbike` (130 lines)
-- [ ] Extract `endgame_kernel_bypass.rs` from `betanet`
-- [ ] Consolidate `io_uring` implementations (betanet vs userspace)
-- [ ] Migrate `knox_proxy` and `tethering_bypass` from `literbike`
-- [ ] Create unified kernel syscall interface
-- [ ] Test consolidated kernel features
+- [x] Migrate `syscall_net.rs` from `literbike` (887 lines)
+- [x] Migrate `syscall_net.rs` from `literbike` (extracted to `src/kernel/syscall_net.rs`)
+- [x] Migrate `posix_sockets.rs` from `literbike` (130 lines)
+- [x] Extract `endgame_kernel_bypass.rs` from `betanet` (as `endgame_bypass.rs`)
+- [x] Consolidate `io_uring` implementations (single impl in `src/kernel/io_uring.rs`)
+- [x] Migrate `knox_proxy` and `tethering_bypass` from `literbike`
+- [x] Create unified kernel syscall interface
+- [x] Test consolidated kernel features

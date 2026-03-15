@@ -109,6 +109,7 @@ pub mod dsel_impl {
 // and when it is not. The feature-enabled tests assert size equality
 // (repr(transparent) should compile away) and simple method forwarding.
 #[cfg(test)]
+#[allow(unused_imports)]
 mod tests {
     use super::dsel_impl;
 

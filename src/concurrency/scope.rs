@@ -46,7 +46,7 @@ impl CoroutineContext {
         guard.insert(std::any::TypeId::of::<T>(), Arc::new(value));
     }
 
-    /// Retrieve an element by concrete type. Returns an Arc<dyn Any> which the caller
+    /// Retrieve an element by concrete type. Returns an `Arc<dyn Any>` which the caller
     /// can downcast (e.g. `(&*arc).downcast_ref::<T>()`).
     pub fn get_typed<T: Any + Send + Sync + 'static>(&self) -> Option<Arc<dyn Any + Send + Sync>> {
         let guard = self.elements.read().unwrap();

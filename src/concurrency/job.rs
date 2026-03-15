@@ -37,6 +37,7 @@ pub trait Job: Send + Sync {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 enum JobState {
     New,
     Active,
@@ -54,6 +55,12 @@ pub struct JobImpl {
     cancel_notify: Arc<Notify>,
     children: Arc<RwLock<Vec<Arc<dyn Job>>>>,
     cause: Arc<RwLock<Option<CancellationException>>>,
+}
+
+impl Default for JobImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JobImpl {
@@ -98,7 +105,7 @@ impl JobImpl {
 impl Job for JobImpl {
     fn start(&self) {
         let state = self.state.clone();
-        let completed_notify = self.completed_notify.clone();
+        let _completed_notify = self.completed_notify.clone();
         
         tokio::spawn(async move {
             let mut state_guard = state.write().await;
@@ -200,6 +207,12 @@ impl Job for JobImpl {
 /// A job that doesn't cancel its children when it's cancelled
 pub struct SupervisorJobImpl {
     inner: JobImpl,
+}
+
+impl Default for SupervisorJobImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SupervisorJobImpl {

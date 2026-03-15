@@ -33,7 +33,7 @@ impl CancellationToken {
     
     /// Check if this token is cancelled
     pub fn is_cancelled(&self) -> bool {
-        self.receiver.is_empty() == false
+        !self.receiver.is_empty()
     }
     
     /// Wait for cancellation
@@ -148,7 +148,7 @@ pub async fn suspendable_cancellable<T, F>(
     block: F,
 ) -> Result<T, CancellationException>
 where
-    F: FnOnce(oneshot::Sender<Result<T, CancellationException>>) -> (),
+    F: FnOnce(oneshot::Sender<Result<T, CancellationException>>),
     T: Send + 'static,
 {
     let (sender, receiver) = oneshot::channel();

@@ -2,6 +2,9 @@
 
 use super::core::{Tensor, TensorShape, DType};
 
+#[cfg(feature = "mlir")]
+include!(concat!(env!("OUT_DIR"), "/mlir_bindings.rs"));
+
 /// MLIR context for managing tensor operations
 pub struct MLIRContext {
     initialized: bool,

@@ -59,6 +59,9 @@ async fn main() -> Result<()> {
     let mut pending: HashMap<String, Vec<PathBuf>> = HashMap::new();
     let mut last_flush = Instant::now();
 
+    // TODO(oroboros): Implement countdown/shutdown logic here.
+    // This should allow graceful termination after a configurable countdown or signal.
+    // Example: Accept a shutdown signal, start a countdown, flush pending work, then exit.
     loop {
         tokio::select! {
             Some(path) = rx.recv() => {

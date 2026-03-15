@@ -117,49 +117,48 @@ impl VM {
         
         while pc < program.instructions.len() {
             let inst = &program.instructions[pc];
-            
+
+            // Validate destination register index
+            let dst_idx = inst.dst as usize;
+            if dst_idx >= self.registers.len() {
+                return Err(format!("Invalid dst register index: {}", inst.dst));
+            }
+
+            // Compute source value (either immediate when src == 0 or register value)
+            let src_value = if inst.src == 0 {
+                inst.imm as u64
+            } else {
+                let sidx = inst.src as usize;
+                if sidx >= self.registers.len() {
+                    return Err(format!("Invalid src register index: {}", inst.src));
+                }
+                self.registers[sidx]
+            };
+
             match inst.opcode {
                 Opcode::Mov => {
-                    self.registers[inst.dst as usize] = if inst.src == 0 {
-                        inst.imm as u64
-                    } else {
-                        self.registers[inst.src as usize]
-                    };
+                    self.registers[dst_idx] = src_value;
                 }
                 Opcode::Add => {
-                    self.registers[inst.dst as usize] = 
-                        self.registers[inst.dst as usize].wrapping_add(
-                            if inst.src == 0 {
-                                inst.imm as u64
-                            } else {
-                                self.registers[inst.src as usize]
-                            }
-                        );
+                    self.registers[dst_idx] = self.registers[dst_idx].wrapping_add(src_value);
                 }
                 Opcode::Sub => {
-                    self.registers[inst.dst as usize] = 
-                        self.registers[inst.dst as usize].wrapping_sub(
-                            if inst.src == 0 {
-                                inst.imm as u64
-                            } else {
-                                self.registers[inst.src as usize]
-                            }
-                        );
+                    self.registers[dst_idx] = self.registers[dst_idx].wrapping_sub(src_value);
                 }
                 Opcode::Exit => {
                     return Ok(self.registers[0]);
                 }
                 Opcode::Jeq => {
-                    if self.registers[inst.dst as usize] == self.registers[inst.src as usize] {
+                    if self.registers[dst_idx] == src_value {
                         pc = (pc as i32 + inst.offset as i32) as usize;
                         continue;
                     }
                 }
                 _ => {
-                    // Simplified: skip unimplemented instructions
+                    return Err(format!("Unimplemented opcode: {:?}", inst.opcode));
                 }
             }
-            
+
             pc += 1;
         }
         

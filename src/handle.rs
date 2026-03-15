@@ -19,7 +19,9 @@ mod unix {
 
     impl OwnedHandle {
         /// Create from a raw fd. Takes ownership (will close on Drop).
-        /// Safety: caller must ensure fd is valid and not closed elsewhere.
+        ///
+        /// # Safety
+        /// Caller must ensure fd is valid and not already closed.
         pub unsafe fn from_raw_fd(fd: RawFd) -> Self {
             Self { fd: Arc::new(fd) }
         }
@@ -108,33 +110,33 @@ mod unix {
 
     #[cfg(test)]
     mod tests {
-    use super::OwnedHandle;
-    use std::os::unix::net::UnixStream;
-    use std::time::Duration;
-    use std::thread;
-    use std::sync::mpsc;
-    use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+        use super::OwnedHandle;
+        use std::os::unix::net::UnixStream;
+        use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Duration;
 
-    // Run a closure in a thread and fail the test if it doesn't complete within `dur`.
-    fn run_with_timeout<T, F>(dur: Duration, f: F) -> T
-    where
-        F: FnOnce() -> T + Send + 'static,
-        T: Send + 'static,
-    {
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(move || {
-            // Catch panics in the child and send them back to the tester thread.
-            let res = catch_unwind(AssertUnwindSafe(f));
-            let _ = tx.send(res);
-        });
+        // Run a closure in a thread and fail the test if it doesn't complete within `dur`.
+        fn run_with_timeout<T, F>(dur: Duration, f: F) -> T
+        where
+            F: FnOnce() -> T + Send + 'static,
+            T: Send + 'static,
+        {
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(move || {
+                // Catch panics in the child and send them back to the tester thread.
+                let res = catch_unwind(AssertUnwindSafe(f));
+                let _ = tx.send(res);
+            });
 
-        match rx.recv_timeout(dur) {
-            Ok(Ok(v)) => v,
-            Ok(Err(payload)) => resume_unwind(payload),
-            Err(mpsc::RecvTimeoutError::Timeout) => panic!("test timed out after {:?}", dur),
-            Err(e) => panic!("recv error: {:?}", e),
+            match rx.recv_timeout(dur) {
+                Ok(Ok(v)) => v,
+                Ok(Err(payload)) => resume_unwind(payload),
+                Err(mpsc::RecvTimeoutError::Timeout) => panic!("test timed out after {:?}", dur),
+                Err(e) => panic!("recv error: {:?}", e),
+            }
         }
-    }
 
         #[test]
         fn smoke_pair_read_write() {

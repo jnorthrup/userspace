@@ -21,6 +21,9 @@ pub mod nio;
 #[cfg(feature = "syscall-net")]
 pub mod syscall_net;
 
+#[cfg(feature = "syscall-net")]
+pub mod posix_sockets;
+
 // Performance and optimization modules
 #[cfg(feature = "kernel-ebpf")]
 pub mod ebpf;
@@ -34,6 +37,15 @@ pub mod densified_ops;
 #[cfg(feature = "kernel")]
 pub mod endgame_bypass;
 
+#[cfg(feature = "kernel")]
+pub mod knox_proxy;
+
+#[cfg(feature = "kernel")]
+pub mod tethering_bypass;
+
+#[cfg(feature = "kernel")]
+pub mod syscall;
+
 #[cfg(feature = "simd")]
 pub mod simd_ops;
 
@@ -46,6 +58,9 @@ pub use {
 
 #[cfg(feature = "syscall-net")]
 pub use syscall_net::{SocketOps, NetworkInterface};
+
+#[cfg(feature = "syscall-net")]
+pub use posix_sockets::{PosixSocket, SocketPair};
 
 #[cfg(feature = "kernel")]
 pub use endgame_bypass::{DensifiedKernel, IoUringParams};
