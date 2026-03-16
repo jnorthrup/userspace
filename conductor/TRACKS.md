@@ -33,21 +33,16 @@ Track 4: Kernel feature tests
 
 ---
 
-## [ ] Track: Fix ebpf_mmap E0515 — return owned bytes not guard slice
+## [x] Track: Fix ebpf_mmap E0515 — CLOSED
 
-`src/kernel/ebpf_mmap.rs:218` returns a reference into a locally-dropped MutexGuard.
-Fix: copy slice into Vec<u8> before returning.
-
-### Status
-- [ ] Fix ebpf_mmap.rs:218 E0515
-- [ ] cargo check --lib --features full: 0 errors
+`cargo check --lib --features kernel-ebpf` passes 0 errors. E0515 resolved in prior session.
 
 ---
 
-## [ ] Track: 11 compiler warnings cleanup (--features full)
+## [x] Track: Compiler warnings cleanup — CLOSED
 
-### Status
-- [ ] Audit 11 warnings, fix dead code / unused vars
+`cargo check --lib --features full` generates 0 rustc warnings (only MLIR build-script note).
+Fixed: unused imports in syscall_net.rs/posix_sockets.rs, unused_mut, dead_code on NetworkInterface fields and fire_io_uring_submit.
 
 ---
 

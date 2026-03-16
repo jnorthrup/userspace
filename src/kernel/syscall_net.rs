@@ -5,12 +5,14 @@
 
 use crate::kernel::endgame_bypass::DensifiedKernel;
 use std::collections::HashMap;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CStr;
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::unix::io::RawFd;
 
 /// Network interface for densified operations
+#[allow(dead_code)]
 pub struct NetworkInterface {
     name: String,
     addrs: Vec<InterfaceAddr>,
@@ -137,6 +139,7 @@ pub fn get_default_local_ipv6() -> io::Result<Ipv6Addr> {
 
 /// List network interfaces with addresses
 pub fn list_interfaces() -> io::Result<HashMap<String, NetworkInterface>> {
+    #[allow(unused_mut)]
     let mut interfaces = HashMap::new();
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

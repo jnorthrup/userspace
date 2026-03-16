@@ -4,7 +4,7 @@
 //! Note: On non-Linux platforms, this provides a compatibility shim.
 
 use std::io;
-use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
+use std::net::{SocketAddr, TcpListener, UdpSocket};
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 
 pub struct PosixSocket {

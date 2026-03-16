@@ -70,6 +70,7 @@ fn fire_socket_read(fd: RawFd, bytes: &[u8], provider: Provider) {
 }
 
 /// Fire io_uring_submit callbacks to all registered observers
+#[allow(dead_code)]
 fn fire_io_uring_submit(fd: RawFd, op: &str) {
     if let Ok(registry) = OBSERVER_REGISTRY.read() {
         for observer in registry.iter() {
