@@ -155,6 +155,11 @@ struct CqRingOffsets {
 }
 
 impl KernelUring {
+    /// Get the file descriptor of the io_uring instance
+    pub fn fd(&self) -> i32 {
+        self.fd
+    }
+
     /// Create kernel io_uring with DIRECT syscall - no libc wrapper
     pub fn new(entries: u32) -> io::Result<Self> {
         let mut params = unsafe { mem::zeroed::<IoUringParams>() };

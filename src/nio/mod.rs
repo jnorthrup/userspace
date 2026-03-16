@@ -13,11 +13,79 @@
 use std::io;
 use std::net::SocketAddr;
 use std::os::unix::io::RawFd;
+use std::sync::{Arc, RwLock};
 
 #[cfg(all(feature = "kernel", target_os = "linux"))]
 use crate::kernel::io_uring;
 #[cfg(feature = "syscall-net")]
 use crate::kernel::posix_sockets;
+
+/// Provider identifier for socket operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    Socket,
+    IoUring,
+    Mmap,
+}
+
+/// NioObserver trait for observing NIO operations
+/// Allows external subscribers (keymux, MCP) to monitor all LLM socket events
+pub trait NioObserver: Send + Sync {
+    /// Called after a socket write operation
+    fn on_socket_write(&self, fd: RawFd, bytes: &[u8], provider: Provider);
+    /// Called after a socket read operation
+    fn on_socket_read(&self, fd: RawFd, bytes: &[u8], provider: Provider);
+    /// Called after an io_uring submit operation
+    fn on_io_uring_submit(&self, fd: RawFd, op: &str);
+    /// Called after an mmap operation
+    fn on_mmap(&self, addr: *mut libc::c_void, len: usize);
+}
+
+/// Global observer registry
+static OBSERVER_REGISTRY: RwLock<Vec<Arc<dyn NioObserver>>> = RwLock::new(Vec::new());
+
+/// Register a new observer to receive NIO operation callbacks
+pub fn register_observer(observer: Arc<dyn NioObserver>) {
+    if let Ok(mut registry) = OBSERVER_REGISTRY.write() {
+        registry.push(observer);
+    }
+}
+
+/// Fire socket_write callbacks to all registered observers
+fn fire_socket_write(fd: RawFd, bytes: &[u8], provider: Provider) {
+    if let Ok(registry) = OBSERVER_REGISTRY.read() {
+        for observer in registry.iter() {
+            observer.on_socket_write(fd, bytes, provider);
+        }
+    }
+}
+
+/// Fire socket_read callbacks to all registered observers
+fn fire_socket_read(fd: RawFd, bytes: &[u8], provider: Provider) {
+    if let Ok(registry) = OBSERVER_REGISTRY.read() {
+        for observer in registry.iter() {
+            observer.on_socket_read(fd, bytes, provider);
+        }
+    }
+}
+
+/// Fire io_uring_submit callbacks to all registered observers
+fn fire_io_uring_submit(fd: RawFd, op: &str) {
+    if let Ok(registry) = OBSERVER_REGISTRY.read() {
+        for observer in registry.iter() {
+            observer.on_io_uring_submit(fd, op);
+        }
+    }
+}
+
+/// Fire mmap callbacks to all registered observers
+fn fire_mmap(addr: *mut libc::c_void, len: usize) {
+    if let Ok(registry) = OBSERVER_REGISTRY.read() {
+        for observer in registry.iter() {
+            observer.on_mmap(addr, len);
+        }
+    }
+}
 
 /// Result type for NIO operations
 pub type NioResult<T> = io::Result<T>;
@@ -177,7 +245,11 @@ pub fn socket_create(domain: SocketDomain, socket_type: SocketType) -> NioResult
 pub fn socket_read(socket: &SocketHandle, buf: &mut [u8]) -> NioResult<usize> {
     #[cfg(feature = "syscall-net")]
     {
-        read_fd(socket.fd(), buf)
+        let result = read_fd(socket.fd(), buf);
+        if let Ok(bytes_read) = result {
+            fire_socket_read(socket.fd(), &buf[..bytes_read], Provider::Socket);
+        }
+        result
     }
     #[cfg(not(feature = "syscall-net"))]
     {
@@ -207,7 +279,11 @@ pub fn socket_read(socket: &SocketHandle, buf: &mut [u8]) -> NioResult<usize> {
 pub fn socket_write(socket: &SocketHandle, buf: &[u8]) -> NioResult<usize> {
     #[cfg(feature = "syscall-net")]
     {
-        write_fd(socket.fd(), buf)
+        let result = write_fd(socket.fd(), buf);
+        if let Ok(bytes_written) = result {
+            fire_socket_write(socket.fd(), &buf[..bytes_written], Provider::Socket);
+        }
+        result
     }
     #[cfg(not(feature = "syscall-net"))]
     {
@@ -247,6 +323,7 @@ pub fn mmap_region(size: usize) -> NioResult<MmapRegion> {
     if ptr == libc::MAP_FAILED {
         Err(io::Error::last_os_error())
     } else {
+        fire_mmap(ptr, size);
         Ok(MmapRegion::new(ptr, size))
     }
 }
@@ -273,7 +350,10 @@ pub fn io_uring_submit(
 ) -> NioResult<()> {
     #[cfg(all(feature = "kernel", target_os = "linux"))]
     {
-        ring.inner().kernel_dispatch(op, data)
+        let fd = ring.inner().fd();
+        let result = ring.inner().kernel_dispatch(op, data);
+        fire_io_uring_submit(fd as RawFd, op);
+        result
     }
     #[cfg(not(all(feature = "kernel", target_os = "linux")))]
     {
