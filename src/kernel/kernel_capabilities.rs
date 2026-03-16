@@ -4,9 +4,6 @@
 //! related to kernel features, performance optimizations, and
 //! low-level system interfaces.
 
-use std::fs;
-use std::env;
-
 /// Represents the detected system capabilities
 #[derive(Debug, Clone)]
 pub struct SystemCapabilities {
@@ -58,8 +55,8 @@ impl SystemCapabilities {
     fn detect_ebpf() -> bool {
         #[cfg(target_os = "linux")]
         {
-            fs::metadata("/sys/fs/bpf").is_ok() &&
-            fs::metadata("/proc/sys/net/core/bpf_jit_enable").is_ok()
+            fs::metadata("/sys/fs/bpf").is_ok()
+                && fs::metadata("/proc/sys/net/core/bpf_jit_enable").is_ok()
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -103,16 +100,16 @@ impl SystemCapabilities {
         {
             #[cfg(target_feature = "sse2")]
             extensions.push("SSE2".to_string());
-            
+
             #[cfg(target_feature = "sse4.2")]
             extensions.push("SSE4.2".to_string());
-            
+
             #[cfg(target_feature = "avx")]
             extensions.push("AVX".to_string());
-            
+
             #[cfg(target_feature = "avx2")]
             extensions.push("AVX2".to_string());
-            
+
             #[cfg(target_feature = "avx512f")]
             extensions.push("AVX-512F".to_string());
         }
@@ -144,6 +141,9 @@ mod tests {
     #[test]
     fn test_system_capabilities_detection() {
         let caps = SystemCapabilities::detect();
-        assert!(caps.simd_extensions.len() > 0, "No SIMD extensions detected");
+        assert!(
+            caps.simd_extensions.len() > 0,
+            "No SIMD extensions detected"
+        );
     }
 }

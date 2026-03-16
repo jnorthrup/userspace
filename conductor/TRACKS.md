@@ -30,3 +30,28 @@ Track 4: Kernel feature tests
 - slice: add integration and unit tests for kernel features
 - verify: cargo test --lib --features "kernel,syscall-net"
 - result: passed (17 tests)
+
+---
+
+## [ ] Track: Fix ebpf_mmap E0515 — return owned bytes not guard slice
+
+`src/kernel/ebpf_mmap.rs:218` returns a reference into a locally-dropped MutexGuard.
+Fix: copy slice into Vec<u8> before returning.
+
+### Status
+- [ ] Fix ebpf_mmap.rs:218 E0515
+- [ ] cargo check --lib --features full: 0 errors
+
+---
+
+## [ ] Track: 11 compiler warnings cleanup (--features full)
+
+### Status
+- [ ] Audit 11 warnings, fix dead code / unused vars
+
+---
+
+## Note: knox_proxy stays in userspace
+
+knox_proxy.rs and tethering_bypass.rs belong in userspace/src/kernel/.
+Do NOT migrate to literbike. They are Android kernel-level adapters, not model routing.

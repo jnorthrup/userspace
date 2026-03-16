@@ -9,10 +9,10 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 pub trait Channel: AsyncRead + AsyncWrite + Send + Sync + Unpin {
     /// Get a descriptive name for this channel type
     fn channel_type(&self) -> &str;
-    
+
     /// Check if the channel is still connected
     fn is_connected(&self) -> bool;
-    
+
     /// Get channel metadata if available
     fn metadata(&self) -> Option<ChannelMetadata> {
         None
@@ -45,7 +45,7 @@ impl Default for ChannelMetadata {
 pub trait ChannelProvider: Send + Sync {
     /// Create a new channel to the specified address
     fn create_channel(&self, addr: &str) -> io::Result<Box<dyn Channel>>;
-    
+
     /// Get the provider name
     fn provider_name(&self) -> &str;
 }
@@ -60,7 +60,7 @@ impl TcpChannel {
     pub fn new(stream: tokio::net::TcpStream) -> io::Result<Self> {
         let remote_addr = stream.peer_addr().ok();
         let local_addr = stream.local_addr().ok();
-        
+
         Ok(Self {
             stream,
             metadata: ChannelMetadata {
@@ -76,12 +76,12 @@ impl Channel for TcpChannel {
     fn channel_type(&self) -> &str {
         "TCP"
     }
-    
+
     fn is_connected(&self) -> bool {
         // Simple check - in production would be more sophisticated
         true
     }
-    
+
     fn metadata(&self) -> Option<ChannelMetadata> {
         Some(self.metadata.clone())
     }
@@ -113,11 +113,11 @@ impl AsyncWrite for TcpChannel {
         }
         result
     }
-    
+
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.stream).poll_flush(cx)
     }
-    
+
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
@@ -127,14 +127,14 @@ impl AsyncWrite for TcpChannel {
 pub struct TcpChannelProvider;
 
 impl ChannelProvider for TcpChannelProvider {
-    fn create_channel(&self, addr: &str) -> io::Result<Box<dyn Channel>> {
+    fn create_channel(&self, _addr: &str) -> io::Result<Box<dyn Channel>> {
         // In a real implementation, this would be async and create the connection
         Err(io::Error::new(
             io::ErrorKind::NotConnected,
             "Synchronous channel creation not implemented",
         ))
     }
-    
+
     fn provider_name(&self) -> &str {
         "TCP"
     }
@@ -143,14 +143,14 @@ impl ChannelProvider for TcpChannelProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_channel_metadata() {
         let metadata = ChannelMetadata::default();
         assert_eq!(metadata.bytes_read, 0);
         assert_eq!(metadata.bytes_written, 0);
     }
-    
+
     #[test]
     fn test_tcp_provider() {
         let provider = TcpChannelProvider;

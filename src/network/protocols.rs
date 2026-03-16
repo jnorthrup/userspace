@@ -1,7 +1,5 @@
 //! Network protocol detection and classification
 
-use std::io;
-
 /// Supported network protocols
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Protocol {
@@ -30,7 +28,7 @@ impl ProtocolDetector {
             detected: None,
         }
     }
-    
+
     /// Feed bytes to the detector
     pub fn feed(&mut self, data: &[u8]) {
         self.buffer.extend_from_slice(data);
@@ -38,18 +36,18 @@ impl ProtocolDetector {
             self.detected = self.detect_protocol();
         }
     }
-    
+
     /// Get the detected protocol if any
     pub fn protocol(&self) -> Option<Protocol> {
         self.detected
     }
-    
+
     /// Detect protocol from buffered data
     fn detect_protocol(&self) -> Option<Protocol> {
         if self.buffer.len() < 4 {
             return None;
         }
-        
+
         // Simple protocol detection based on first bytes
         match &self.buffer[..] {
             // HTTP methods
@@ -63,7 +61,7 @@ impl ProtocolDetector {
             _ => None,
         }
     }
-    
+
     /// Reset the detector
     pub fn reset(&mut self) {
         self.buffer.clear();
@@ -87,14 +85,14 @@ pub fn detect_protocol(data: &[u8]) -> Protocol {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_http_detection() {
         let mut detector = ProtocolDetector::new();
         detector.feed(b"GET / HTTP/1.1\r\n");
         assert_eq!(detector.protocol(), Some(Protocol::Http));
     }
-    
+
     #[test]
     fn test_ssh_detection() {
         let mut detector = ProtocolDetector::new();

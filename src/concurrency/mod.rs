@@ -2,7 +2,7 @@
 //!
 //! This module provides call-for-call identical abstractions to Kotlin coroutines,
 //! implementing structured concurrency patterns with hierarchical cancellation,
-//! coroutine scopes, and deferred results.
+//! coroutine scopes, deferred results, and channels.
 
 pub mod scope;
 pub mod dispatcher;
@@ -10,6 +10,7 @@ pub mod job;
 pub mod deferred;
 pub mod launch;
 pub mod cancel;
+pub mod channels;
 
 pub use scope::*;
 pub use dispatcher::*;
@@ -17,6 +18,7 @@ pub use job::*;
 pub use deferred::*;
 pub use launch::*;
 pub use cancel::*;
+pub use channels::*;
 
 use std::future::Future;
 use std::pin::Pin;

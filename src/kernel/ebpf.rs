@@ -22,20 +22,20 @@ pub enum Opcode {
     Mod,
     Xor,
     Mov,
-    
+
     // Memory operations
     Load,
     Store,
-    
+
     // Jump operations
-    Ja,   // Jump always
-    Jeq,  // Jump if equal
-    Jgt,  // Jump if greater than
-    Jge,  // Jump if greater or equal
-    Jlt,  // Jump if less than
-    Jle,  // Jump if less or equal
-    Jne,  // Jump if not equal
-    
+    Ja,  // Jump always
+    Jeq, // Jump if equal
+    Jgt, // Jump if greater than
+    Jge, // Jump if greater or equal
+    Jlt, // Jump if less than
+    Jle, // Jump if less or equal
+    Jne, // Jump if not equal
+
     // Call/Return
     Call,
     Exit,
@@ -65,15 +65,15 @@ impl Program {
             name: name.into(),
         }
     }
-    
+
     pub fn add_instruction(&mut self, inst: Instruction) {
         self.instructions.push(inst);
     }
-    
+
     pub fn len(&self) -> usize {
         self.instructions.len()
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.instructions.is_empty()
     }
@@ -94,27 +94,30 @@ impl VM {
             programs: HashMap::new(),
         }
     }
-    
+
     pub fn load_program(&mut self, program: Program) -> Result<(), String> {
         if program.is_empty() {
             return Err("Cannot load empty program".to_string());
         }
-        
-        self.programs.insert(program.name.clone(), Arc::new(program));
+
+        self.programs
+            .insert(program.name.clone(), Arc::new(program));
         Ok(())
     }
-    
+
     pub fn execute(&mut self, program_name: &str, ctx: &[u8]) -> Result<u64, String> {
-        let program = self.programs.get(program_name)
+        let program = self
+            .programs
+            .get(program_name)
             .ok_or_else(|| format!("Program '{}' not found", program_name))?
             .clone();
-        
+
         // Initialize context
         self.registers[1] = ctx.as_ptr() as u64;
         self.registers[10] = self.memory.as_ptr() as u64 + self.memory.len() as u64;
-        
+
         let mut pc = 0;
-        
+
         while pc < program.instructions.len() {
             let inst = &program.instructions[pc];
 
@@ -161,10 +164,10 @@ impl VM {
 
             pc += 1;
         }
-        
+
         Ok(self.registers[0])
     }
-    
+
     pub fn reset(&mut self) {
         self.registers = [0; 11];
         self.memory.fill(0);
@@ -173,6 +176,7 @@ impl VM {
 
 /// JIT compiler for eBPF programs (placeholder)
 pub struct JitCompiler {
+    #[allow(dead_code)]
     target: String,
 }
 
@@ -182,7 +186,7 @@ impl JitCompiler {
             target: target.into(),
         }
     }
-    
+
     pub fn compile(&self, _program: &Program) -> Result<Vec<u8>, String> {
         // Placeholder for JIT compilation
         // In a real implementation, this would generate native machine code
@@ -193,11 +197,11 @@ impl JitCompiler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_simple_program() {
         let mut program = Program::new("test");
-        
+
         // mov r0, 42
         program.add_instruction(Instruction {
             opcode: Opcode::Mov,
@@ -206,7 +210,7 @@ mod tests {
             offset: 0,
             imm: 42,
         });
-        
+
         // exit
         program.add_instruction(Instruction {
             opcode: Opcode::Exit,
@@ -215,18 +219,18 @@ mod tests {
             offset: 0,
             imm: 0,
         });
-        
+
         let mut vm = VM::new(4096);
         vm.load_program(program).unwrap();
-        
+
         let result = vm.execute("test", &[]).unwrap();
         assert_eq!(result, 42);
     }
-    
+
     #[test]
     fn test_arithmetic() {
         let mut program = Program::new("arithmetic");
-        
+
         // mov r0, 10
         program.add_instruction(Instruction {
             opcode: Opcode::Mov,
@@ -235,7 +239,7 @@ mod tests {
             offset: 0,
             imm: 10,
         });
-        
+
         // add r0, 32
         program.add_instruction(Instruction {
             opcode: Opcode::Add,
@@ -244,7 +248,7 @@ mod tests {
             offset: 0,
             imm: 32,
         });
-        
+
         // exit
         program.add_instruction(Instruction {
             opcode: Opcode::Exit,
@@ -253,10 +257,10 @@ mod tests {
             offset: 0,
             imm: 0,
         });
-        
+
         let mut vm = VM::new(4096);
         vm.load_program(program).unwrap();
-        
+
         let result = vm.execute("arithmetic", &[]).unwrap();
         assert_eq!(result, 42);
     }

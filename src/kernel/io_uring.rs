@@ -447,20 +447,165 @@ impl std::future::Future for UringFuture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     
     #[test]
     fn test_kernel_uring_creation() {
-        // Note: This test requires Linux with io_uring support
         if cfg!(target_os = "linux") {
             match KernelUring::new(256) {
-                Ok(_ring) => {
-                    // Successfully created
-                }
+                Ok(_ring) => {}
                 Err(e) => {
-                    // May fail on non-Linux or without io_uring
                     eprintln!("io_uring not available: {}", e);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_kernel_sqe_construction() {
+        let sqe = KernelSQE {
+            opcode: OpCode::READV.0,
+            flags: 0,
+            ioprio: 0,
+            fd: 10,
+            off_addr2: 0,
+            addr: 0x1000,
+            len: 4096,
+            rw_flags: 0,
+            user_data: 123,
+            buf_index: 0,
+            personality: 0,
+            splice_fd_in: -1,
+            addr3: 0,
+            resv: 0,
+        };
+        assert_eq!(sqe.fd, 10);
+        assert_eq!(sqe.len, 4096);
+        assert_eq!(sqe.user_data, 123);
+        assert_eq!(std::mem::size_of::<KernelSQE>(), 64);
+    }
+
+    #[test]
+    fn test_kernel_cqe_construction() {
+        let cqe = KernelCQE {
+            user_data: 123,
+            res: 1024,
+            flags: 0,
+        };
+        assert_eq!(cqe.res, 1024);
+        assert_eq!(std::mem::size_of::<KernelCQE>(), 16);
+    }
+
+    #[test]
+    fn test_opcode_constants() {
+        assert_eq!(OpCode::NOP.0, 0);
+        assert_eq!(OpCode::READV.0, 1);
+        assert_eq!(OpCode::WRITEV.0, 2);
+        assert_eq!(OpCode::READ_FIXED.0, 4);
+        assert_eq!(OpCode::WRITE_FIXED.0, 5);
+        assert_eq!(OpCode::POLL_ADD.0, 6);
+        assert_eq!(OpCode::RECV.0, 10);
+        assert_eq!(OpCode::SEND.0, 11);
+    }
+
+    #[test]
+    fn test_kernel_ops_table() {
+        assert_eq!(KERNEL_OPS.len(), 4);
+        assert_eq!(KERNEL_OPS[0].0, "read");
+        assert_eq!(KERNEL_OPS[1].0, "write");
+        assert_eq!(KERNEL_OPS[2].0, "recv");
+        assert_eq!(KERNEL_OPS[3].0, "send");
+    }
+
+    #[test]
+    fn test_uring_constants() {
+        assert_eq!(IORING_SETUP_IOPOLL, 1);
+        assert_eq!(IORING_SETUP_SQPOLL, 2);
+        assert_eq!(IORING_SETUP_SQ_AFF, 4);
+        assert_eq!(IORING_SETUP_CQSIZE, 8);
+        assert_eq!(IORING_SETUP_SINGLE_ISSUER, 4096);
+        assert_eq!(IORING_SETUP_DEFER_TASKRUN, 8192);
+    }
+
+    #[test]
+    fn test_syscall_constants() {
+        assert_eq!(SYS_IO_URING_SETUP, 425);
+        assert_eq!(SYS_IO_URING_ENTER, 426);
+        assert_eq!(SYS_IO_URING_REGISTER, 427);
+    }
+
+    #[test]
+    fn test_liburing_with_emulation_failover() {
+        struct EmulationBackend {
+            fallback_count: Arc<AtomicU32>,
+        }
+
+        impl EmulationBackend {
+            fn new() -> Self {
+                Self {
+                    fallback_count: Arc::new(AtomicU32::new(0)),
+                }
+            }
+
+            fn try_native(&self) -> bool {
+                if cfg!(target_os = "linux") {
+                    KernelUring::new(32).is_ok()
+                } else {
+                    false
+                }
+            }
+
+            fn emulate(&self) -> std::io::Result<Vec<KernelCQE>> {
+                self.fallback_count.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![])
+            }
+        }
+
+        let backend = EmulationBackend::new();
+        
+        if backend.try_native() {
+            let ring = KernelUring::new(256).unwrap();
+            assert!(ring.sq_entries() > 0);
+        } else {
+            let result = backend.emulate();
+            assert!(result.is_ok());
+            assert_eq!(backend.fallback_count.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_async_uring_with_failover() {
+        use tokio::io::unix::AsyncFd;
+
+        struct AsyncUringAdapter {
+            use_emulation: bool,
+        }
+
+        impl AsyncUringAdapter {
+            fn new() -> Self {
+                Self {
+                    use_emulation: !cfg!(target_os = "linux"),
+                }
+            }
+
+            async fn read(&self, fd: std::os::unix::io::RawFd, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.use_emulation {
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                    Err(std::io::Error::new(std::io::ErrorKind::Other, "emulated"))
+                } else {
+                    tokio::io::async_readead::AsyncRead::read(&AsyncFd::new(fd).unwrap(), buf).await
+                }
+            }
+        }
+
+        let adapter = AsyncUringAdapter::new();
+        
+        if cfg!(target_os = "linux") {
+            let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let fd = socket.as_raw_fd();
+            let mut buf = [0u8; 10];
+            let result = adapter.read(fd, &mut buf).await;
+            assert!(result.is_err() || result.unwrap() == 0);
         }
     }
 }

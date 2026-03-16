@@ -99,8 +99,7 @@ impl TunnelSession {
     }
 
     pub fn close(&self) {
-        use std::io::{Read, Write};
-        let mut stream = unsafe { TcpStream::from_raw_fd(self.client_fd) };
+        let stream = unsafe { TcpStream::from_raw_fd(self.client_fd) };
         let _ = stream.shutdown(std::net::Shutdown::Both);
         let _ = self.target_stream.shutdown(std::net::Shutdown::Both);
     }

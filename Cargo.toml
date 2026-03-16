@@ -57,6 +57,7 @@ dsel-debug = ["dsel"]
 
 # Database feature
 database = []
+simd = []
 
 # Optional duckdb embedding for examples
 duckdb = ["dep:duckdb"]
