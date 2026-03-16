@@ -14,8 +14,28 @@ Expose kernel IO operations (io_uring, socket syscalls, mmap) as userspace Servi
 - `mmap_region()` — track virtual address reservations
 - `io_uring_submit()` — profile async IO vs bun's sync stalls
 
+## Multicast observer model
+
+SPI is a multicast tap — every LLM call through modelmux fires NIO SPI events
+to all registered observers simultaneously without overhead in the hot path:
+
+```
+modelmux :8888
+    ↓ NIO SPI socket_write()
+    ├── upstream provider (the actual call)
+    └── observer multicast:
+        ├── keymux quota tracker (token counting via event push, not poll)
+        ├── latency histogram (per provider)
+        ├── provider health state machine
+        └── MCP tools (real-time Claude visibility into all LLM traffic)
+```
+
+No polling. No instrumentation in provider code. The SPI fires on every
+socket_write/read to any upstream — observers see every byte across all providers.
+
 ## Integration
 - literbike calls these facades transparently
+- keymux quota tracking moves from poll → SPI event push
 - opencode MCP tools expose them for real-time observation
 - bun process runs alongside, both logged to same metric stream
 
