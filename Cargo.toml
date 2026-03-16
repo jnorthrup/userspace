@@ -46,10 +46,11 @@ kernel = []
 kernel-ebpf = ["kernel"]
 kernel-tensor = ["kernel-ebpf"]
 network = []
+nio = ["kernel", "syscall-net"]
 syscall-net = []
 tensor = []
 mlir = []
-full = ["concurrency", "kernel", "kernel-tensor", "network", "tensor", "database"]
+full = ["concurrency", "kernel", "kernel-tensor", "network", "tensor", "database", "nio"]
 
 # DSEL features
 dsel = []

@@ -17,6 +17,9 @@ pub mod dsel;
 #[cfg(feature = "kernel")]
 pub mod kernel;
 
+#[cfg(feature = "nio")]
+pub mod nio;
+
 #[cfg(feature = "network")]
 pub mod network;
 
